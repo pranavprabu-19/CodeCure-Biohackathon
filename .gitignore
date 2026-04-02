@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+venv/
+.venv/
+env/
+.env
+*.egg-info/
+.eggs/
+dist/
+build/
+
+# Models & large data (regenerate with `python app.py` in backend/)
+backend/models_multi.pkl
+backend/model.pkl
+backend/*.pkl
+# Large optional dataset (keep tox21.csv if you want it in the repo)
+backend/250k_rndm_zinc_drugs_clean_3.csv
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.idea/
+.vscode/

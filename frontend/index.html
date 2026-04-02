@@ -1,0 +1,1791 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>ToxScan – Drug Toxicity Predictor</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;700;800&display=swap" rel="stylesheet"/>
+<!-- Charts: canvas only (no Chart.js). PDF: jsPDF loaded on demand. -->
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --surface: #12121a;
+    --surface2: #1a1a26;
+    --border: #2a2a3d;
+    --accent: #00ff9d;
+    --accent2: #ff4d6d;
+    --accent3: #ffd60a;
+    --text: #e8e8f0;
+    --muted: #6b6b8a;
+    --low: #5dffbf;
+    --medium: #ffe066;
+    --high: #ff6b86;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Syne', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Animated background grid */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0,255,157,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,255,157,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .container {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 2rem;
+    position: relative;
+    z-index: 1;
+  }
+
+  /* Header */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 2rem 0 3rem;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 3rem;
+  }
+
+  .logo {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .logo-name {
+    font-size: 2.2rem;
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    background: linear-gradient(135deg, var(--accent) 0%, #00c9ff 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .logo-sub {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.65rem;
+    color: var(--muted);
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    margin-top: 2px;
+  }
+
+  .badge {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.65rem;
+    padding: 0.3rem 0.8rem;
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    border-radius: 100px;
+    letter-spacing: 0.1em;
+    animation: pulse-border 2s ease-in-out infinite;
+  }
+
+  .header-right {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.4rem;
+  }
+
+  .backend-status {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.65rem;
+    padding: 0.2rem 0.7rem;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    background: rgba(255,255,255,0.02);
+  }
+
+  .backend-status.live {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: rgba(0,255,157,0.05);
+  }
+
+  .backend-status.demo {
+    border-color: var(--medium);
+    color: var(--medium);
+    background: rgba(255,214,10,0.06);
+  }
+
+  @keyframes pulse-border {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(0,255,157,0.3); }
+    50% { box-shadow: 0 0 0 6px rgba(0,255,157,0); }
+  }
+
+  /* Input Section */
+  .input-section {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 2rem;
+    margin-bottom: 2rem;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .input-section::after {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, var(--accent), transparent);
+  }
+
+  .input-label {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.7rem;
+    color: var(--muted);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-bottom: 1rem;
+    display: block;
+  }
+
+  .smiles-row {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .smiles-input {
+    flex: 1;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 0.9rem 1.2rem;
+    color: var(--text);
+    font-family: 'Space Mono', monospace;
+    font-size: 0.85rem;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+
+  .smiles-input:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(0,255,157,0.1);
+  }
+
+  .predict-btn {
+    background: var(--accent);
+    color: #0a0a0f;
+    border: none;
+    border-radius: 10px;
+    padding: 0.9rem 2rem;
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+  }
+
+  .predict-btn:hover {
+    background: #00e68a;
+    transform: translateY(-1px);
+    box-shadow: 0 6px 20px rgba(0,255,157,0.3);
+  }
+
+  .predict-btn:focus-visible,
+  .preset-btn:focus-visible,
+  .assay-filter-btn:focus-visible,
+  .smiles-input:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  .predict-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+  }
+
+  /* Preset molecules */
+  .presets-label {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.65rem;
+    color: var(--muted);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    margin-bottom: 0.75rem;
+    display: block;
+  }
+
+  .presets {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .preset-btn {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    border-radius: 8px;
+    padding: 0.4rem 0.9rem;
+    font-family: 'Space Mono', monospace;
+    font-size: 0.72rem;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .preset-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: rgba(0,255,157,0.05);
+  }
+
+  /* Results */
+  .results-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 1.5rem;
+    position: relative;
+    overflow: hidden;
+    transition: border-color 0.3s;
+  }
+
+  .card-title {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.65rem;
+    color: var(--muted);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-bottom: 1.2rem;
+  }
+
+  /* Risk Gauge */
+  .risk-display {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  .gauge-wrap {
+    position: relative;
+    width: 160px;
+    height: 160px;
+  }
+
+  .gauge-svg {
+    transform: rotate(-90deg);
+  }
+
+  .gauge-bg {
+    fill: none;
+    stroke: var(--surface2);
+    stroke-width: 12;
+  }
+
+  .gauge-fill {
+    fill: none;
+    stroke-width: 12;
+    stroke-linecap: round;
+    transition: stroke-dashoffset 1s cubic-bezier(0.4,0,0.2,1), stroke 0.5s;
+  }
+
+  .gauge-center {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+  }
+
+  .gauge-pct {
+    font-size: 2rem;
+    font-weight: 800;
+    line-height: 1;
+  }
+
+  .gauge-label {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.6rem;
+    color: var(--muted);
+    letter-spacing: 0.1em;
+    margin-top: 2px;
+  }
+
+  .risk-badge {
+    font-size: 1rem;
+    font-weight: 700;
+    padding: 0.4rem 1.2rem;
+    border-radius: 100px;
+    letter-spacing: 0.05em;
+  }
+
+  .risk-LOW    { background: rgba(0,255,157,0.15); color: var(--low); border: 1px solid var(--low); }
+  .risk-MEDIUM { background: rgba(255,214,10,0.15); color: var(--medium); border: 1px solid var(--medium); }
+  .risk-HIGH   { background: rgba(255,77,109,0.15); color: var(--high); border: 1px solid var(--high); }
+
+  /* Molecule image */
+  .mol-img-wrap {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 160px;
+  }
+
+  .mol-img {
+    max-width: 100%;
+    border-radius: 8px;
+    background: white;
+    padding: 6px;
+  }
+
+  .mol-placeholder {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--muted);
+    font-family: 'Space Mono', monospace;
+    font-size: 0.7rem;
+  }
+
+  .mol-placeholder svg {
+    opacity: 0.3;
+  }
+
+  /* Assay heatmap */
+  .assay-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.5rem;
+  }
+
+  .assay-cell {
+    border-radius: 8px;
+    padding: 0.6rem 0.5rem;
+    text-align: center;
+    transition: transform 0.2s;
+  }
+
+  .assay-cell:hover { transform: scale(1.04); }
+
+  .assay-name {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.6rem;
+    letter-spacing: 0.05em;
+    margin-bottom: 0.3rem;
+    opacity: 0.9;
+  }
+
+  .assay-val {
+    font-weight: 700;
+    font-size: 0.95rem;
+  }
+
+  /* Feature importance chart */
+  .chart-wrap {
+    height: 220px;
+    position: relative;
+  }
+
+  /* Full-width chart card */
+  .card-full {
+    grid-column: 1 / -1;
+  }
+
+  /* Loader */
+  .loader {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 3rem;
+    color: var(--muted);
+    font-family: 'Space Mono', monospace;
+    font-size: 0.8rem;
+  }
+
+  .dots {
+    display: flex; gap: 4px;
+  }
+  .dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+    animation: bounce 1.2s ease-in-out infinite;
+  }
+  .dot:nth-child(2) { animation-delay: 0.2s; }
+  .dot:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes bounce {
+    0%, 80%, 100% { transform: scale(0.6); opacity: 0.5; }
+    40% { transform: scale(1); opacity: 1; }
+  }
+
+  /* Error */
+  .error-box {
+    background: rgba(255,77,109,0.1);
+    border: 1px solid var(--high);
+    border-radius: 10px;
+    padding: 1rem 1.5rem;
+    color: var(--high);
+    font-family: 'Space Mono', monospace;
+    font-size: 0.8rem;
+    margin-top: 1rem;
+  }
+
+  /* Insight box */
+  .insight-box {
+    background: rgba(0,255,157,0.04);
+    border: 1px solid rgba(0,255,157,0.2);
+    border-radius: 12px;
+    padding: 1.2rem 1.5rem;
+    font-size: 0.85rem;
+    color: var(--text);
+    line-height: 1.6;
+    margin-bottom: 1.5rem;
+  }
+
+  .insight-box strong { color: var(--accent); }
+
+  .summary-row {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0,1fr));
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .summary-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1rem 1.25rem;
+    font-size: 0.8rem;
+  }
+
+  .summary-label {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.65rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 0.4rem;
+  }
+
+  .summary-main {
+    font-weight: 700;
+    margin-bottom: 0.2rem;
+  }
+
+  .summary-sub {
+    font-size: 0.78rem;
+    color: var(--muted);
+  }
+
+  .current-compound-tag {
+    margin-top: 0.75rem;
+    font-family: 'Space Mono', monospace;
+    font-size: 0.7rem;
+    color: var(--muted);
+  }
+
+  .current-compound-tag strong {
+    color: var(--accent);
+  }
+
+  .history-card,
+  .compare-card,
+  .howto-card,
+  .about-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 1.25rem 1.5rem;
+    margin-top: 1.2rem;
+  }
+
+  .section-title {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.65rem;
+    color: var(--muted);
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    margin-bottom: 0.9rem;
+  }
+
+  .history-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.78rem;
+  }
+
+  .history-table th,
+  .history-table td {
+    padding: 0.5rem 0.4rem;
+    text-align: left;
+  }
+
+  .history-table th {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.7rem;
+    color: var(--muted);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .history-table tr:nth-child(even) td {
+    background: rgba(255,255,255,0.01);
+  }
+
+  .history-badge {
+    padding: 0.15rem 0.5rem;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    font-family: 'Space Mono', monospace;
+  }
+
+  .history-badge.low { background: rgba(0,255,157,0.08); color: var(--low); }
+  .history-badge.medium { background: rgba(255,214,10,0.08); color: var(--medium); }
+  .history-badge.high { background: rgba(255,77,109,0.08); color: var(--high); }
+
+  .compare-grid {
+    display: grid;
+    grid-template-columns: repeat(2,minmax(0,1fr));
+    gap: 1rem;
+  }
+
+  .compare-label {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.7rem;
+    color: var(--muted);
+    margin-bottom: 0.25rem;
+  }
+
+  .compare-delta {
+    margin-top: 0.5rem;
+    font-size: 0.8rem;
+    color: var(--muted);
+  }
+
+  .assay-legend {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin-top: 0.75rem;
+    font-size: 0.7rem;
+    color: var(--muted);
+    font-family: 'Space Mono', monospace;
+  }
+
+  .assay-legend-bar {
+    flex: 1;
+    height: 6px;
+    border-radius: 999px;
+    background: linear-gradient(90deg, var(--low), var(--medium), var(--high));
+  }
+
+  .assay-filters {
+    display: flex;
+    gap: 0.4rem;
+    margin-bottom: 0.6rem;
+  }
+
+  .assay-filter-btn {
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--muted);
+    font-family: 'Space Mono', monospace;
+    font-size: 0.65rem;
+    padding: 0.15rem 0.6rem;
+    cursor: pointer;
+  }
+
+  .assay-filter-btn.active {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: rgba(0,255,157,0.06);
+  }
+
+  .risk-mini-chart {
+    margin-top: 0.75rem;
+    height: 130px;
+  }
+
+  .about-toggle {
+    margin-top: 0.5rem;
+    font-family: 'Space Mono', monospace;
+    font-size: 0.7rem;
+    color: var(--accent);
+    cursor: pointer;
+    text-decoration: underline;
+  }
+
+  .loader-message {
+    margin-left: 0.5rem;
+    font-style: italic;
+  }
+
+  .hero-tagline {
+    font-size: 1.05rem;
+    color: var(--text);
+    max-width: 42rem;
+    line-height: 1.5;
+    margin-bottom: 0.75rem;
+  }
+
+  .tech-strip {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.7rem;
+    color: var(--muted);
+    letter-spacing: 0.08em;
+    margin-bottom: 2rem;
+    padding-bottom: 1.5rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .tool-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 0.75rem;
+    align-items: center;
+  }
+
+  .tool-btn {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.7rem;
+    padding: 0.35rem 0.75rem;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    color: var(--text);
+    cursor: pointer;
+  }
+
+  .tool-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  .tool-btn:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  .favorites-panel {
+    margin-top: 0.75rem;
+    font-size: 0.78rem;
+    color: var(--muted);
+  }
+
+  .favorites-panel ul { margin-top: 0.35rem; padding-left: 1rem; }
+
+  .site-footer {
+    margin-top: 3rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--border);
+    font-size: 0.75rem;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+
+  .site-footer strong { color: var(--text); }
+
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.65);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    padding: 1rem;
+  }
+
+  .modal-overlay.hidden { display: none !important; }
+
+  .modal-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    max-width: 520px;
+    width: 100%;
+    padding: 1.5rem;
+    border-top: 1px solid var(--accent);
+  }
+
+  .modal-title {
+    font-weight: 800;
+    margin-bottom: 0.5rem;
+  }
+
+  .modal-close {
+    float: right;
+    background: none;
+    border: none;
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 1.2rem;
+    line-height: 1;
+  }
+
+  .modal-close:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  @media print {
+    body::before { display: none; }
+    .input-section, .tool-row, .site-footer, header .badge, #backendStatus { display: none !important; }
+  }
+
+  .hidden { display: none !important; }
+
+  @media (max-width: 700px) {
+    .results-grid { grid-template-columns: 1fr; }
+    .assay-grid { grid-template-columns: repeat(2,1fr); }
+    header { flex-direction: column; gap: 1rem; }
+    .summary-row { grid-template-columns: 1fr; }
+    .compare-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <div class="logo">
+      <span class="logo-name">ToxScan</span>
+      <span class="logo-sub">AI Drug Toxicity Predictor · Tox21</span>
+    </div>
+    <div class="header-right">
+      <span class="badge">CODECURE HACKATHON</span>
+      <span id="backendStatus" class="backend-status">Checking backend…</span>
+    </div>
+  </header>
+
+  <p class="hero-tagline">
+    Screen any SMILES string against twelve Tox21-style assays in seconds—see overall risk, a pathway heatmap, and which fingerprint bits drive the score. Built for fast hackathon demos and portfolio storytelling.
+  </p>
+  <div class="tech-strip">
+    Flask · RDKit · scikit-learn · Canvas charts · Morgan fingerprints · Tox21-inspired labels
+  </div>
+
+  <!-- Input -->
+  <div class="input-section">
+    <span class="input-label">Enter SMILES String</span>
+    <div class="smiles-row">
+      <input class="smiles-input" id="smilesInput"
+        placeholder="e.g. CC(=O)Oc1ccccc1C(=O)O  (Aspirin)"
+        value="CC(=O)Oc1ccccc1C(=O)O" />
+      <button class="predict-btn" id="predictBtn" onclick="runPrediction()">
+        Analyze →
+      </button>
+    </div>
+
+    <span class="presets-label">Quick Examples</span>
+    <div class="presets">
+      <button class="preset-btn" onclick="loadPreset('CC(=O)Oc1ccccc1C(=O)O', this)">💊 Aspirin</button>
+      <button class="preset-btn" onclick="loadPreset('Cn1cnc2c1c(=O)n(c(=O)n2C)C', this)">☕ Caffeine</button>
+      <button class="preset-btn" onclick="loadPreset('c1ccc2c(c1)cc1ccc3cccc4ccc2c1c34', this)">⚠️ Pyrene (Toxic)</button>
+      <button class="preset-btn" onclick="loadPreset('CC12CCC3C(C1CCC2O)CCC4=CC(=O)CCC34C', this)">🧬 Testosterone</button>
+      <button class="preset-btn" onclick="loadPreset('OC[C@H]1OC(O)[C@H](O)[C@@H](O)[C@@H]1O', this)">🍬 Glucose</button>
+      <button class="preset-btn" onclick="loadPreset('Clc1ccc(cc1Cl)C(c1ccc(Cl)cc1Cl)C(Cl)(Cl)Cl', this)">☣️ DDT</button>
+    </div>
+
+    <div class="current-compound-tag" id="currentCompoundTag">
+      Currently viewing: <strong>Aspirin</strong> (preset)
+    </div>
+
+    <div class="error-box hidden" id="errorBox"></div>
+
+    <div class="tool-row">
+      <button type="button" class="tool-btn" onclick="copyReport()">Copy report</button>
+      <button type="button" class="tool-btn" onclick="downloadReportPdf()">Download PDF</button>
+      <button type="button" class="tool-btn" onclick="window.print()">Print / Save as PDF</button>
+      <button type="button" class="tool-btn" onclick="addFavoritePrompt()">Save to favorites</button>
+    </div>
+    <p style="font-size:0.7rem;color:var(--muted);margin-top:0.5rem;font-family:'Space Mono',monospace;">
+      Hosted API: add <code style="color:var(--accent);">?api=https://your-backend.example.com</code> to this page’s URL (saved in this browser).
+    </p>
+    <div class="favorites-panel" id="favoritesPanel">
+      <span style="font-family:'Space Mono',monospace;font-size:0.65rem;color:var(--muted);letter-spacing:0.1em;">SAVED</span>
+      <ul id="favoritesList"></ul>
+    </div>
+  </div>
+
+  <!-- Loading -->
+  <div class="loader hidden" id="loader">
+    <div class="dots">
+      <div class="dot"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+    Analyzing molecular structure...
+  </div>
+
+  <!-- Results -->
+  <div id="results" class="hidden">
+
+    <div class="insight-box" id="insightBox"></div>
+
+    <div class="summary-row">
+      <div class="summary-card">
+        <div class="summary-label">Current Compound</div>
+        <div class="summary-main" id="summaryCompoundName">Aspirin</div>
+        <div class="summary-sub" id="summaryCompoundMeta">Preset molecule · Drug-like</div>
+      </div>
+      <div class="summary-card">
+        <div class="summary-label">Highest-Risk Assay</div>
+        <div class="summary-main" id="summaryTopAssay">—</div>
+        <div class="summary-sub" id="summaryTopAssayNote">Assay-specific biological risk will appear here.</div>
+      </div>
+      <div class="summary-card">
+        <div class="summary-label">Model / Session</div>
+        <div class="summary-main" id="summaryModelMode">Demo mode</div>
+        <div class="summary-sub" id="summarySessionInfo">Session risk histogram updates as you analyze molecules.</div>
+      </div>
+    </div>
+
+    <div class="results-grid">
+
+      <!-- Risk Gauge -->
+      <div class="card">
+        <div class="card-title">Overall Toxicity Risk</div>
+        <div class="risk-display">
+          <div class="gauge-wrap">
+            <svg id="gaugeSvg" class="gauge-svg" width="160" height="160" viewBox="0 0 160 160"
+              role="img" aria-label="Overall toxicity risk gauge">
+              <circle class="gauge-bg" cx="80" cy="80" r="64"
+                stroke-dasharray="402" stroke-dashoffset="0"/>
+              <circle class="gauge-fill" id="gaugeFill" cx="80" cy="80" r="64"
+                stroke-dasharray="402" stroke-dashoffset="402"/>
+            </svg>
+            <div class="gauge-center">
+              <div class="gauge-pct" id="gaugePct">—</div>
+              <div class="gauge-label">RISK SCORE</div>
+            </div>
+          </div>
+          <div class="risk-badge" id="riskBadge">—</div>
+        </div>
+      </div>
+
+      <!-- Molecule Image -->
+      <div class="card">
+        <div class="card-title">Molecular Structure</div>
+        <div class="mol-img-wrap" id="molImgWrap">
+          <div class="mol-placeholder">
+            <svg width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+              <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+            </svg>
+            <span>No image available</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Assay heatmap -->
+      <div class="card card-full">
+        <div class="card-title">Tox21 Assay Scores (12 targets)</div>
+        <div class="assay-filters">
+          <button class="assay-filter-btn active" id="filterAllBtn" onclick="setAssayFilter('all')">All</button>
+          <button class="assay-filter-btn" id="filterNRBtn" onclick="setAssayFilter('NR')">Nuclear receptor panel (NR)</button>
+          <button class="assay-filter-btn" id="filterSRBtn" onclick="setAssayFilter('SR')">Stress response panel (SR)</button>
+        </div>
+        <div class="assay-grid" id="assayGrid"></div>
+        <div class="assay-legend">
+          <span>Low</span>
+          <div class="assay-legend-bar"></div>
+          <span>High</span>
+        </div>
+      </div>
+
+      <!-- Feature importance -->
+      <div class="card card-full">
+        <div class="card-title">Top Molecular Features Driving Prediction</div>
+        <div class="chart-wrap">
+          <canvas id="featureChart" role="img" aria-label="Feature importance bar chart"></canvas>
+        </div>
+        <p style="margin-top:0.6rem;font-size:0.78rem;color:var(--muted);">
+          Bits correspond to hashed molecular fragments from the Morgan fingerprint used by the random forest; higher bars mean those fragments push the model more strongly toward toxicity.
+        </p>
+      </div>
+
+    </div>
+
+    <div class="history-card">
+      <div class="section-title">Recent Predictions (this session)</div>
+      <table class="history-table" id="historyTable">
+        <thead>
+          <tr>
+            <th>Compound</th>
+            <th>SMILES</th>
+            <th>Risk</th>
+            <th>Top assay</th>
+            <th>When</th>
+          </tr>
+        </thead>
+        <tbody id="historyBody"></tbody>
+      </table>
+    </div>
+
+    <div class="compare-card">
+      <div class="section-title">A/B Comparison</div>
+      <div style="margin-bottom:0.5rem;font-size:0.78rem;color:var(--muted);">
+        Set a baseline compound, then analyze another to compare risk side-by-side.
+      </div>
+      <button class="predict-btn" style="padding:0.4rem 1rem;font-size:0.75rem;margin-right:0.5rem;" onclick="setBaselineFromCurrent()">Set current as baseline</button>
+      <button class="predict-btn" style="padding:0.4rem 1rem;font-size:0.75rem;background:transparent;border-color:var(--border);color:var(--muted);" onclick="clearBaseline()">Clear baseline</button>
+      <button type="button" class="tool-btn" style="margin-left:0.25rem;" onclick="setCompareBaselinePreset('CC(=O)Oc1ccccc1C(=O)O','Aspirin')">Baseline: Aspirin</button>
+      <button type="button" class="tool-btn" onclick="setCompareBaselinePreset('Clc1ccc(cc1Cl)C(c1ccc(Cl)cc1Cl)C(Cl)(Cl)Cl','DDT')">Baseline: DDT</button>
+      <div class="compare-grid" id="compareGrid" style="margin-top:0.9rem;"></div>
+      <div class="compare-delta" id="compareDelta"></div>
+    </div>
+
+    <div class="howto-card">
+      <div class="section-title">How to read this dashboard</div>
+      <ul style="font-size:0.8rem;color:var(--muted);margin-left:1.1rem;line-height:1.6;">
+        <li><strong>Overall risk</strong> condenses all 12 Tox21 assays into a single score from 0–1, shown on the gauge as Low, Medium, or High toxicity risk.</li>
+        <li><strong>Assay scores</strong> show which specific nuclear receptor (NR) or stress response (SR) pathways light up most strongly for this molecule.</li>
+        <li><strong>Features</strong> are structural fragments (Morgan fingerprint bits) that most strongly push the model toward toxicity for this compound.</li>
+      </ul>
+      <div class="risk-mini-chart">
+        <canvas id="riskHistoryChart" role="img" aria-label="Session overall risk trend"></canvas>
+      </div>
+    </div>
+
+    <div class="about-card">
+      <div class="section-title">About Tox21</div>
+      <div id="aboutBody" style="font-size:0.8rem;color:var(--muted);line-height:1.6;max-height:5.5rem;overflow:hidden;">
+        The Tox21 program is a collaboration between U.S. agencies to screen thousands of chemicals against a collection of toxicity assays, including nuclear receptor and stress response pathways.
+        This demo uses a compact model trained on a subset of public Tox21 data to estimate toxicity risk directly from SMILES strings.
+      </div>
+      <div class="about-toggle" onclick="toggleAbout()">Show more / less about Tox21</div>
+    </div>
+  </div>
+
+  <footer class="site-footer">
+    <p><strong>Demo vs live:</strong> Start <code>python app.py</code> in <code>backend/</code> so the status pill can show a connected model. For a static frontend + remote API, use <code>?api=...</code> (see note above). Opening this file alone without a reachable API uses deterministic browser mock scores.</p>
+    <p><strong>Disclaimer:</strong> For research, education, and hackathon demos only—not for clinical decisions or regulatory submissions.</p>
+    <p id="footerUpdated"></p>
+  </footer>
+
+</div>
+
+<div id="assayModal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="assayModalTitle" onclick="if(event.target===this)closeAssayModal()">
+  <div class="modal-box" onclick="event.stopPropagation()">
+    <button type="button" class="modal-close" onclick="closeAssayModal()" aria-label="Close dialog">×</button>
+    <div class="modal-title" id="assayModalTitle">Assay details</div>
+    <div id="assayModalBody" style="font-size:0.85rem;color:var(--muted);line-height:1.6;"></div>
+  </div>
+</div>
+
+<script>
+const API_STORAGE_KEY = "toxscan_api_base";
+
+function getResolvedApiUrl() {
+  try {
+    const params = new URLSearchParams(window.location.search || "");
+    const q = params.get("api");
+    if (q && q.trim()) {
+      const u = q.trim().replace(/\/$/, "");
+      try { localStorage.setItem(API_STORAGE_KEY, u); } catch (e) { /* ignore */ }
+      return u;
+    }
+  } catch (e) { /* ignore */ }
+  try {
+    const stored = localStorage.getItem(API_STORAGE_KEY);
+    if (stored && stored.trim()) return stored.trim().replace(/\/$/, "");
+  } catch (e) { /* ignore */ }
+  return "http://localhost:5000";
+}
+
+let API_URL = getResolvedApiUrl();
+
+let backendInfo = { connected: false, realModel: false, multiTarget: false };
+let jspdfPromise = null;
+
+function ensureJsPdf() {
+  if ((window.jspdf && window.jspdf.jsPDF) || typeof window.jsPDF !== "undefined") {
+    return Promise.resolve();
+  }
+  if (!jspdfPromise) {
+    jspdfPromise = new Promise((resolve, reject) => {
+      const s = document.createElement("script");
+      s.src = "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js";
+      s.async = true;
+      s.onload = () => resolve();
+      s.onerror = () => reject(new Error("jsPDF failed to load"));
+      document.head.appendChild(s);
+    });
+  }
+  return jspdfPromise;
+}
+
+function drawFeatureImportanceBars(data) {
+  const canvas = document.getElementById("featureChart");
+  if (!canvas || !data.feature_importance || !data.feature_importance.length) return;
+  const features = data.feature_importance.slice(0, 8);
+  const maxVal = Math.max(...features.map((f) => f.importance), 1e-9);
+  const wrap = canvas.parentElement;
+  const w = Math.max(300, wrap ? wrap.clientWidth : 400);
+  const rowH = 30;
+  const pad = { t: 10, r: 16, b: 10, l: 128 };
+  const h = pad.t + features.length * rowH + pad.b;
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = w * dpr;
+  canvas.height = h * dpr;
+  canvas.style.width = `${w}px`;
+  canvas.style.height = `${h}px`;
+  const ctx = canvas.getContext("2d");
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.scale(dpr, dpr);
+  ctx.fillStyle = "#12121a";
+  ctx.fillRect(0, 0, w, h);
+  const barX0 = pad.l;
+  const barW = w - pad.l - pad.r;
+  features.forEach((f, i) => {
+    const y = pad.t + i * rowH;
+    ctx.fillStyle = "#8a8aad";
+    ctx.font = '11px "Space Mono", monospace';
+    ctx.textAlign = "right";
+    ctx.textBaseline = "middle";
+    const lab = f.feature.length > 16 ? `${f.feature.slice(0, 14)}…` : f.feature;
+    ctx.fillText(lab, barX0 - 6, y + rowH / 2);
+    const bw = barW * (f.importance / maxVal);
+    const alpha = Math.max(0.35, 0.88 - i * 0.09);
+    ctx.fillStyle = `rgba(0,255,157,${alpha})`;
+    const bh = rowH - 12;
+    ctx.fillRect(barX0, y + 6, Math.max(4, bw), bh);
+  });
+  canvas.setAttribute(
+    "aria-label",
+    `Feature importance: top ${features.length} Morgan fingerprint bits for this prediction`
+  );
+}
+
+const PRESETS = {
+  "CC(=O)Oc1ccccc1C(=O)O": { name: "Aspirin", type: "Drug-like" },
+  "Cn1cnc2c1c(=O)n(c(=O)n2C)C": { name: "Caffeine", type: "Stimulant" },
+  "c1ccc2c(c1)cc1ccc3cccc4ccc2c1c34": { name: "Pyrene", type: "Polycyclic aromatic (toxic)" },
+  "CC12CCC3C(C1CCC2O)CCC4=CC(=O)CCC34C": { name: "Testosterone", type: "Steroid hormone" },
+  "OC[C@H]1OC(O)[C@H](O)[C@@H](O)[C@@H]1O": { name: "Glucose", type: "Sugar" },
+  "Clc1ccc(cc1Cl)C(c1ccc(Cl)cc1Cl)C(Cl)(Cl)Cl": { name: "DDT", type: "Legacy pesticide" }
+};
+
+const ASSAY_META = {
+  "NR-AR": { full: "Androgen receptor (NR-AR)", family: "NR", note: "Hormone signaling; activation may indicate endocrine disruption." },
+  "NR-AR-LBD": { full: "Androgen receptor ligand binding domain", family: "NR", note: "Ligand binding to AR; may affect reproductive endpoints." },
+  "NR-AhR": { full: "Aryl hydrocarbon receptor (NR-AhR)", family: "NR", note: "Linked to dioxin-like toxicity and potential carcinogenicity." },
+  "NR-Aromatase": { full: "Aromatase (NR-Aromatase)", family: "NR", note: "Enzyme converting androgens to estrogens; inhibition affects hormone balance." },
+  "NR-ER": { full: "Estrogen receptor (NR-ER)", family: "NR", note: "Estrogenic activity; disruptions can impact development and reproduction." },
+  "NR-ER-LBD": { full: "Estrogen receptor ligand binding domain", family: "NR", note: "Direct ligand interactions with ER; may signal endocrine effects." },
+  "NR-PPAR-gamma": { full: "PPAR-gamma (NR-PPAR-gamma)", family: "NR", note: "Metabolic regulation; off-target activation may impact lipid and glucose homeostasis." },
+  "SR-ARE": { full: "Antioxidant response element (SR-ARE)", family: "SR", note: "Oxidative stress response; activation suggests reactive or electrophilic species." },
+  "SR-ATAD5": { full: "ATAD5 (SR-ATAD5)", family: "SR", note: "DNA damage response; activation can indicate genotoxic stress." },
+  "SR-HSE": { full: "Heat shock response (SR-HSE)", family: "SR", note: "Cellular stress and protein damage; strong signals hint at cytotoxicity." },
+  "SR-MMP": { full: "Mitochondrial membrane potential (SR-MMP)", family: "SR", note: "Mitochondrial disruption, often associated with apoptosis or bioenergetic toxicity." },
+  "SR-p53": { full: "p53 pathway (SR-p53)", family: "SR", note: "Tumor suppressor pathway; activation may reflect DNA damage or oncogenic stress." }
+};
+
+let predictionsHistory = [];
+let lastResultData = null;
+let assayFilter = "all";
+let baselineResult = null;
+let loaderInterval = null;
+const FAV_KEY = "toxscan_favorites_v1";
+
+function loadPreset(smiles, btn) {
+  document.getElementById('smilesInput').value = smiles;
+  document.querySelectorAll('.preset-btn').forEach(b => b.style.borderColor = '');
+  btn.style.borderColor = 'var(--accent)';
+  btn.style.color = 'var(--accent)';
+  const meta = PRESETS[smiles];
+  const tag = document.getElementById('currentCompoundTag');
+  if (tag && meta) {
+    tag.innerHTML = `Currently viewing: <strong>${meta.name}</strong> (preset · ${meta.type})`;
+  } else if (tag) {
+    tag.innerHTML = `Currently viewing: <strong>Custom molecule</strong>`;
+  }
+  runPrediction();
+}
+
+function getRiskColor(score) {
+  if (score > 0.6) return 'var(--high)';
+  if (score > 0.3) return 'var(--medium)';
+  return 'var(--low)';
+}
+
+function getAssayBg(score) {
+  const r = score > 0.6 ? 255 : score > 0.3 ? 255 : 0;
+  const g = score > 0.6 ? 77 : score > 0.3 ? 214 : 255;
+  const b = score > 0.6 ? 109 : score > 0.3 ? 10 : 157;
+  return `rgba(${r},${g},${b},${0.1 + score * 0.2})`;
+}
+
+function getInsight(data) {
+  const topAssay = Object.entries(data.assay_scores).sort((a,b) => b[1]-a[1])[0];
+  const level = data.risk_level;
+  const pct = Math.round(data.overall_risk * 100);
+
+  const insights = {
+    Low: `<strong>Low Toxicity Risk (${pct}%)</strong> — This compound shows minimal toxicity signals across Tox21 assays. The highest flag is <strong>${topAssay[0]}</strong> at ${Math.round(topAssay[1]*100)}%. Molecular fingerprint analysis suggests favorable safety margins, consistent with drug-like properties.`,
+    Medium: `<strong>Moderate Toxicity Risk (${pct}%)</strong> — This compound shows notable activity in <strong>${topAssay[0]}</strong> (${Math.round(topAssay[1]*100)}%). Caution is warranted — further structural optimization or analogue screening may reduce toxicity while preserving efficacy.`,
+    High: `<strong>High Toxicity Risk (${pct}%)</strong> — Strong toxicity signals detected, particularly in <strong>${topAssay[0]}</strong> (${Math.round(topAssay[1]*100)}%). The Morgan fingerprint reveals structural motifs commonly associated with genotoxic or endocrine-disrupting activity. This compound is unlikely to progress in standard drug development pipelines without significant modification.`
+  };
+  return insights[level] || '';
+}
+
+function humanRiskLabel(level) {
+  if (level === 'High') return 'High toxicity risk';
+  if (level === 'Medium') return 'Moderate toxicity risk';
+  return 'Low toxicity risk';
+}
+
+function startLoaderMessages() {
+  const loader = document.getElementById('loader');
+  if (!loader) return;
+  const base = 'Analyzing molecular structure...';
+  const msgSpan = document.createElement('span');
+  msgSpan.className = 'loader-message';
+  loader.appendChild(msgSpan);
+  const messages = [
+    'Computing Morgan fingerprints',
+    'Querying Tox21-inspired model',
+    'Aggregating assay-level risk scores'
+  ];
+  let idx = 0;
+  msgSpan.textContent = ' ' + messages[idx];
+  loaderInterval = setInterval(() => {
+    idx = (idx + 1) % messages.length;
+    msgSpan.textContent = ' ' + messages[idx];
+  }, 1400);
+}
+
+function stopLoaderMessages() {
+  if (loaderInterval) {
+    clearInterval(loaderInterval);
+    loaderInterval = null;
+  }
+  const loader = document.getElementById('loader');
+  if (!loader) return;
+  const span = loader.querySelector('.loader-message');
+  if (span) span.remove();
+}
+
+async function checkBackend() {
+  API_URL = getResolvedApiUrl();
+  const el = document.getElementById('backendStatus');
+  if (!el) return;
+  try {
+    const res = await fetch(`${API_URL}/health`, { method: 'GET' });
+    if (!res.ok) throw new Error('health failed');
+    const data = await res.json();
+    backendInfo.connected = true;
+    backendInfo.realModel = !!data.model_loaded;
+    backendInfo.multiTarget = !!data.multi_target;
+    el.textContent = backendInfo.realModel
+      ? (backendInfo.multiTarget ? 'Backend: Live multi-assay Tox21 model' : 'Backend: Live Tox21 model')
+      : 'Backend: Connected (mock model)';
+    el.classList.remove('demo');
+    el.classList.add('live');
+  } catch (e) {
+    backendInfo.connected = false;
+    backendInfo.realModel = false;
+    backendInfo.multiTarget = false;
+    el.textContent = 'Backend: Demo mode (frontend only)';
+    el.classList.remove('live');
+    el.classList.add('demo');
+  }
+}
+
+async function runPrediction() {
+  API_URL = getResolvedApiUrl();
+  const smiles = document.getElementById('smilesInput').value.trim();
+  if (!smiles) return;
+
+  document.getElementById('results').classList.add('hidden');
+  document.getElementById('errorBox').classList.add('hidden');
+  document.getElementById('loader').classList.remove('hidden');
+  document.getElementById('predictBtn').disabled = true;
+  startLoaderMessages();
+
+  try {
+    const res = await fetch(`${API_URL}/predict`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ smiles })
+    });
+
+    const data = await res.json();
+    if (!res.ok || data.error) throw new Error(data.error || 'Prediction failed');
+
+    await renderResults(data);
+  } catch (err) {
+    // Demo mode: generate mock data if backend not running
+    if (err.message.includes('fetch') || err.message.includes('Failed')) {
+      await renderResults(generateMockData(smiles));
+      const el = document.getElementById('backendStatus');
+      if (el) {
+        el.textContent = 'Backend: Demo mode (frontend only)';
+        el.classList.remove('live');
+        el.classList.add('demo');
+      }
+    } else {
+      document.getElementById('errorBox').textContent = '⚠ ' + err.message;
+      document.getElementById('errorBox').classList.remove('hidden');
+    }
+  } finally {
+    document.getElementById('loader').classList.add('hidden');
+    document.getElementById('predictBtn').disabled = false;
+    stopLoaderMessages();
+  }
+}
+
+function generateMockData(smiles) {
+  // Deterministic mock based on SMILES string
+  let seed = smiles.split('').reduce((a,c) => a + c.charCodeAt(0), 0);
+  const rand = () => { seed = (seed * 1664525 + 1013904223) & 0xffffffff; return Math.abs(seed) / 0xffffffff; };
+
+  const overall = rand() * 0.8 + 0.1;
+  const assays = ["NR-AR","NR-AR-LBD","NR-AhR","NR-Aromatase","NR-ER","NR-ER-LBD","NR-PPAR-gamma","SR-ARE","SR-ATAD5","SR-HSE","SR-MMP","SR-p53"];
+  const assay_scores = {};
+  assays.forEach(a => { assay_scores[a] = Math.min(0.99, Math.max(0.01, overall + (rand()-0.5)*0.4)); });
+
+  const feature_importance = Array.from({length:10}, (_,i) => ({
+    feature: `Bit ${Math.floor(rand()*2048)}`,
+    importance: rand() * 0.08
+  })).sort((a,b) => b.importance - a.importance);
+
+  const assay_uncertainty = {};
+  assays.forEach(a => {
+    assay_uncertainty[a] = Math.min(0.2, Math.abs(rand() - 0.5) * 0.3);
+  });
+  return {
+    smiles,
+    overall_risk: overall,
+    assay_scores,
+    assay_uncertainty,
+    feature_importance,
+    mol_image: null,
+    risk_level: overall > 0.6 ? 'High' : overall > 0.3 ? 'Medium' : 'Low'
+  };
+}
+
+async function renderResults(data, opts = {}) {
+  const appendHistory = opts.appendHistory !== false;
+  document.getElementById('results').classList.remove('hidden');
+
+  // Insight
+  document.getElementById('insightBox').innerHTML = getInsight(data);
+
+  lastResultData = data;
+
+  // Summary cards
+  const presetMeta = PRESETS[data.smiles];
+  const compoundName = presetMeta ? presetMeta.name : 'Custom molecule';
+  const compoundMeta = presetMeta ? `Preset · ${presetMeta.type}` : 'Entered via SMILES';
+  document.getElementById('summaryCompoundName').textContent = compoundName;
+  document.getElementById('summaryCompoundMeta').textContent = compoundMeta;
+
+  const topAssayEntry = Object.entries(data.assay_scores).sort((a,b) => b[1]-a[1])[0];
+  if (topAssayEntry) {
+    const [assayName, score] = topAssayEntry;
+    const meta = ASSAY_META[assayName] || { full: assayName, note: 'Highest-scoring assay for this molecule.' };
+    document.getElementById('summaryTopAssay').textContent = `${meta.full} (${Math.round(score*100)}%)`;
+    document.getElementById('summaryTopAssayNote').textContent = meta.note;
+  }
+
+  const modelLabel = backendInfo.connected
+    ? (backendInfo.realModel
+        ? (backendInfo.multiTarget ? 'Live multi-assay Tox21' : 'Live Tox21 model')
+        : 'Backend mock model')
+    : 'Frontend demo mode';
+  document.getElementById('summaryModelMode').textContent = modelLabel;
+  const lc = data.low_confidence_assays;
+  const si = document.getElementById('summarySessionInfo');
+  if (si) {
+    si.textContent = (lc && lc.length)
+      ? `${lc.length} assay(s) flagged: higher uncertainty or limited training data.`
+      : 'Session risk trend updates as you analyze molecules.';
+  }
+
+  // Gauge
+  const pct = Math.round(data.overall_risk * 100);
+  const circumference = 2 * Math.PI * 64;
+  const offset = circumference * (1 - data.overall_risk);
+  const fill = document.getElementById('gaugeFill');
+  fill.style.strokeDashoffset = offset;
+  fill.style.stroke = getRiskColor(data.overall_risk);
+  document.getElementById('gaugePct').textContent = pct + '%';
+  document.getElementById('gaugePct').style.color = getRiskColor(data.overall_risk);
+
+  const badge = document.getElementById('riskBadge');
+  badge.textContent = data.risk_level + ' Risk';
+  badge.className = `risk-badge risk-${data.risk_level.toUpperCase()}`;
+
+  const gsvg = document.getElementById('gaugeSvg');
+  if (gsvg) {
+    gsvg.setAttribute('aria-label', `Overall toxicity risk ${pct} percent, ${data.risk_level} risk band`);
+  }
+
+  // Molecule image
+  const wrap = document.getElementById('molImgWrap');
+  if (data.mol_image) {
+    wrap.innerHTML = `<img class="mol-img" src="data:image/png;base64,${data.mol_image}" alt="Molecule"/>`;
+  } else {
+    wrap.innerHTML = `
+      <div class="mol-placeholder">
+        <svg width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+          <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+        </svg>
+        <span style="text-align:center">Install RDKit backend<br>to see structure</span>
+      </div>`;
+  }
+
+  // Assay heatmap (with filters & tooltips)
+  renderAssayGrid();
+
+  // Feature importance (canvas bars — no external chart library)
+  drawFeatureImportanceBars(data);
+
+  // History + risk distribution
+  if (appendHistory) updateHistory(data, compoundName, topAssayEntry);
+  drawMiniRiskHistoryChart();
+
+  // Comparison panel
+  renderComparison();
+
+  if (data.smiles) updateHashFromSmiles(data.smiles);
+}
+
+function renderAssayGrid() {
+  if (!lastResultData) return;
+  const grid = document.getElementById('assayGrid');
+  if (!grid) return;
+  grid.innerHTML = '';
+  Object.entries(lastResultData.assay_scores).forEach(([name, score]) => {
+    const meta = ASSAY_META[name] || {};
+    if (assayFilter === 'NR' && meta.family !== 'NR') return;
+    if (assayFilter === 'SR' && meta.family !== 'SR') return;
+    const cell = document.createElement('div');
+    cell.className = 'assay-cell';
+    cell.style.cursor = 'pointer';
+    cell.style.background = getAssayBg(score);
+    cell.style.border = `1px solid ${getRiskColor(score)}33`;
+    const title = meta.full ? `${meta.full}\n${meta.note}` : name;
+    cell.title = title + ' — click for details';
+    cell.innerHTML = `
+      <div class="assay-name" style="color:${getRiskColor(score)}">${name}</div>
+      <div class="assay-val" style="color:${getRiskColor(score)}">${Math.round(score*100)}%</div>
+    `;
+    cell.onclick = () => openAssayModal(name, score);
+    grid.appendChild(cell);
+  });
+}
+
+function openAssayModal(name, score) {
+  const meta = ASSAY_META[name] || {};
+  const title = document.getElementById('assayModalTitle');
+  const body = document.getElementById('assayModalBody');
+  const modal = document.getElementById('assayModal');
+  if (!title || !body || !modal) return;
+  title.textContent = meta.full || name;
+  let html = `<p><strong>Model score (risk proxy):</strong> ${Math.round(score * 100)}%</p>`;
+  html += `<p>${meta.note || 'Assay-specific pathway readout from Tox21-style panels.'}</p>`;
+  if (lastResultData && lastResultData.assay_uncertainty && lastResultData.assay_uncertainty[name] != null) {
+    html += `<p><strong>Uncertainty (tree spread):</strong> ${Number(lastResultData.assay_uncertainty[name]).toFixed(3)} — higher values mean more disagreement between trees.</p>`;
+  }
+  if (lastResultData && lastResultData.assay_train_meta && lastResultData.assay_train_meta[name]) {
+    const tm = lastResultData.assay_train_meta[name];
+    html += `<p><strong>Training data:</strong> n≈${tm.n_samples}, positives≈${tm.n_positive}`;
+    if (tm.auc_holdout != null) html += `, holdout AUC≈${tm.auc_holdout.toFixed(2)}`;
+    html += '.</p>';
+  }
+  if (lastResultData && lastResultData.low_confidence_assays && lastResultData.low_confidence_assays.includes(name)) {
+    html += '<p><em>This assay is flagged as lower confidence (sparse labels or high model spread).</em></p>';
+  }
+  body.innerHTML = html;
+  modal.classList.remove('hidden');
+}
+
+function closeAssayModal() {
+  const modal = document.getElementById('assayModal');
+  if (modal) modal.classList.add('hidden');
+}
+
+function setAssayFilter(filter) {
+  assayFilter = filter;
+  ['filterAllBtn','filterNRBtn','filterSRBtn'].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const shouldActive =
+      (id === 'filterAllBtn' && filter === 'all') ||
+      (id === 'filterNRBtn' && filter === 'NR') ||
+      (id === 'filterSRBtn' && filter === 'SR');
+    el.classList.toggle('active', shouldActive);
+  });
+  renderAssayGrid();
+}
+
+function updateHistory(data, compoundName, topAssayEntry) {
+  const now = new Date();
+  const when = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const [topAssay, topScore] = topAssayEntry || ['—', 0];
+  predictionsHistory.unshift({
+    name: compoundName,
+    smiles: data.smiles,
+    risk: data.overall_risk,
+    level: data.risk_level,
+    topAssay,
+    topScore,
+    when,
+    data
+  });
+  if (predictionsHistory.length > 20) predictionsHistory.pop();
+
+  const body = document.getElementById('historyBody');
+  if (!body) return;
+  body.innerHTML = '';
+  predictionsHistory.forEach((row, idx) => {
+    const tr = document.createElement('tr');
+    const levelClass = row.level ? row.level.toLowerCase() : 'low';
+    const shortSmiles = row.smiles.length > 22 ? row.smiles.slice(0, 19) + '…' : row.smiles;
+    tr.innerHTML = `
+      <td>${row.name}</td>
+      <td title="${row.smiles}">${shortSmiles}</td>
+      <td><span class="history-badge ${levelClass}">${Math.round(row.risk*100)}% ${row.level}</span></td>
+      <td>${row.topAssay}</td>
+      <td>${row.when}</td>
+    `;
+    tr.style.cursor = 'pointer';
+    tr.onclick = async () => {
+      lastResultData = row.data;
+      await renderResults(row.data, { appendHistory: false });
+    };
+    body.appendChild(tr);
+  });
+}
+
+function drawMiniRiskHistoryChart() {
+  const canvas = document.getElementById('riskHistoryChart');
+  if (!canvas || predictionsHistory.length === 0) return;
+  const wrap = canvas.parentElement;
+  const w = Math.max(280, wrap ? wrap.clientWidth : 300);
+  const h = 130;
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = w * dpr;
+  canvas.height = h * dpr;
+  canvas.style.width = `${w}px`;
+  canvas.style.height = `${h}px`;
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, w, h);
+  const pad = 10;
+  const values = predictionsHistory.map(row => row.risk);
+  ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+  for (let i = 0; i <= 4; i++) {
+    const y = pad + ((h - 2 * pad) * i) / 4;
+    ctx.beginPath();
+    ctx.moveTo(pad, y);
+    ctx.lineTo(w - pad, y);
+    ctx.stroke();
+  }
+  if (values.length < 2) {
+    const x = w / 2;
+    const y = h - pad - values[0] * (h - 2 * pad);
+    ctx.fillStyle = '#00ff9d';
+    ctx.beginPath();
+    ctx.arc(x, y, 4, 0, Math.PI * 2);
+    ctx.fill();
+    return;
+  }
+  ctx.strokeStyle = '#00ff9d';
+  ctx.lineWidth = 2;
+  const xs = [];
+  const ys = [];
+  values.forEach((v, i) => {
+    const x = pad + ((w - 2 * pad) * i) / (values.length - 1);
+    const y = h - pad - v * (h - 2 * pad);
+    xs.push(x); ys.push(y);
+  });
+  ctx.beginPath();
+  xs.forEach((x, i) => { if (i === 0) ctx.moveTo(x, ys[i]); else ctx.lineTo(x, ys[i]); });
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(xs[0], ys[0]);
+  xs.forEach((x, i) => ctx.lineTo(x, ys[i]));
+  ctx.lineTo(xs[xs.length - 1], h - pad);
+  ctx.lineTo(xs[0], h - pad);
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(0,255,157,0.12)';
+  ctx.fill();
+}
+
+function setBaselineFromCurrent() {
+  if (!lastResultData) return;
+  const presetMeta = PRESETS[lastResultData.smiles];
+  baselineResult = {
+    name: presetMeta ? presetMeta.name : 'Baseline',
+    data: lastResultData
+  };
+  renderComparison();
+}
+
+function clearBaseline() {
+  baselineResult = null;
+  renderComparison();
+}
+
+function renderComparison() {
+  const grid = document.getElementById('compareGrid');
+  const deltaEl = document.getElementById('compareDelta');
+  if (!grid || !deltaEl) return;
+  grid.innerHTML = '';
+  deltaEl.textContent = '';
+  if (!baselineResult || !lastResultData) {
+    deltaEl.textContent = 'Set a baseline, then run another prediction to see the difference in overall risk.';
+    return;
+  }
+  const currentMeta = PRESETS[lastResultData.smiles];
+  const baseName = baselineResult.name;
+  const currentName = currentMeta ? currentMeta.name : 'Current';
+  const baseRisk = baselineResult.data.overall_risk;
+  const currentRisk = lastResultData.overall_risk;
+
+  const makeCardHtml = (title, risk, level) => `
+    <div class="compare-label">${title}</div>
+    <div class="summary-main">${Math.round(risk*100)}% (${level})</div>
+    <div class="summary-sub">${humanRiskLabel(level)}</div>
+  `;
+
+  const left = document.createElement('div');
+  left.className = 'summary-card';
+  left.innerHTML = makeCardHtml(baseName, baseRisk, baselineResult.data.risk_level);
+
+  const right = document.createElement('div');
+  right.className = 'summary-card';
+  right.innerHTML = makeCardHtml(currentName, currentRisk, lastResultData.risk_level);
+
+  grid.appendChild(left);
+  grid.appendChild(right);
+
+  const diff = Math.round((currentRisk - baseRisk) * 100);
+  if (diff === 0) {
+    deltaEl.textContent = `${currentName} has similar overall toxicity risk to ${baseName}.`;
+  } else if (diff > 0) {
+    deltaEl.textContent = `${currentName} is approximately ${Math.abs(diff)} percentage points higher in overall toxicity risk than ${baseName}.`;
+  } else {
+    deltaEl.textContent = `${currentName} is approximately ${Math.abs(diff)} percentage points lower in overall toxicity risk than ${baseName}.`;
+  }
+}
+
+function toggleAbout() {
+  const body = document.getElementById('aboutBody');
+  if (!body) return;
+  if (body.style.maxHeight && body.style.maxHeight !== '5.5rem') {
+    body.style.maxHeight = '5.5rem';
+  } else {
+    body.style.maxHeight = 'none';
+  }
+}
+
+function applyHashSmiles() {
+  const m = location.hash.match(/smiles=([^&]+)/);
+  if (!m) return;
+  try {
+    const s = decodeURIComponent(m[1]);
+    const inp = document.getElementById('smilesInput');
+    if (inp) inp.value = s;
+  } catch (e) { /* ignore */ }
+}
+
+function updateHashFromSmiles(smiles) {
+  if (!smiles) return;
+  const next = `#smiles=${encodeURIComponent(smiles)}`;
+  if (location.hash !== next) history.replaceState(null, '', next);
+}
+
+function loadFavorites() {
+  try { return JSON.parse(localStorage.getItem(FAV_KEY) || '[]'); } catch (e) { return []; }
+}
+
+function saveFavorites(arr) {
+  localStorage.setItem(FAV_KEY, JSON.stringify(arr));
+}
+
+function renderFavoritesList() {
+  const ul = document.getElementById('favoritesList');
+  if (!ul) return;
+  const items = loadFavorites();
+  ul.innerHTML = '';
+  items.forEach((item, idx) => {
+    const li = document.createElement('li');
+    const short = item.smiles.length > 24 ? item.smiles.slice(0, 21) + '…' : item.smiles;
+    li.innerHTML = `<a href="#" style="color:var(--accent);text-decoration:none;" onclick="loadFavoriteIdx(${idx});return false;">${item.nick}</a> <span style="color:var(--muted);font-size:0.7rem;">${short}</span>`;
+    ul.appendChild(li);
+  });
+}
+
+function loadFavoriteIdx(idx) {
+  const items = loadFavorites();
+  if (!items[idx]) return;
+  document.getElementById('smilesInput').value = items[idx].smiles;
+  updateHashFromSmiles(items[idx].smiles);
+  runPrediction();
+}
+
+function addFavoritePrompt() {
+  if (!lastResultData) {
+    alert('Run a prediction first, then save.');
+    return;
+  }
+  const nick = window.prompt('Nickname (e.g. my lead compound):');
+  if (!nick) return;
+  const arr = loadFavorites();
+  arr.push({ nick: nick.trim(), smiles: lastResultData.smiles });
+  saveFavorites(arr);
+  renderFavoritesList();
+}
+
+async function downloadReportPdf() {
+  if (!lastResultData) {
+    alert('Nothing to download yet — run Analyze first.');
+    return;
+  }
+  try {
+    await ensureJsPdf();
+  } catch (e) {
+    alert('Could not load PDF library. Check your network and try again.');
+    return;
+  }
+  const JsPDF = (window.jspdf && window.jspdf.jsPDF) || window.jsPDF;
+  if (!JsPDF) {
+    alert('PDF library not available after load.');
+    return;
+  }
+  const doc = new JsPDF({ unit: 'pt', format: 'a4' });
+  const d = lastResultData;
+  let y = 48;
+  const margin = 48;
+  const line = 14;
+  doc.setFontSize(18);
+  doc.setTextColor(40, 40, 40);
+  doc.text('ToxScan report', margin, y);
+  y += line * 2;
+  doc.setFontSize(10);
+  const topAssay = Object.entries(d.assay_scores).sort((a, b) => b[1] - a[1])[0];
+  const blocks = [
+    `SMILES: ${d.smiles}`,
+    `Overall risk: ${Math.round(d.overall_risk * 100)}% (${d.risk_level})`,
+    topAssay ? `Top assay: ${topAssay[0]} at ${Math.round(topAssay[1] * 100)}%` : '',
+    '',
+    'Assay scores:',
+    ...Object.entries(d.assay_scores).map(([k, v]) => `  ${k}: ${Math.round(v * 100)}%`)
+  ];
+  if (d.low_confidence_assays && d.low_confidence_assays.length) {
+    blocks.push(''); blocks.push(`Low-confidence assays: ${d.low_confidence_assays.join(', ')}`);
+  }
+  blocks.push('');
+  blocks.push('Disclaimer: Research / demo only — not for clinical use.');
+  blocks.forEach((t) => {
+    if (!t) { y += line * 0.5; return; }
+    const lines = doc.splitTextToSize(t, 500);
+    lines.forEach((ln) => {
+      if (y > 760) { doc.addPage(); y = margin; }
+      doc.text(ln, margin, y);
+      y += line;
+    });
+  });
+  if (d.mol_image) {
+    try {
+      if (y > 560) { doc.addPage(); y = margin; }
+      doc.addImage(`data:image/png;base64,${d.mol_image}`, 'PNG', margin, y, 220, 140);
+      y += 160;
+    } catch (e) { /* skip image */ }
+  }
+  doc.save('toxscan-report.pdf');
+}
+
+function copyReport() {
+  if (!lastResultData) {
+    alert('Nothing to copy yet — run Analyze first.');
+    return;
+  }
+  const d = lastResultData;
+  const lines = [
+    'ToxScan report',
+    'SMILES: ' + d.smiles,
+    `Overall risk: ${Math.round(d.overall_risk * 100)}% (${d.risk_level})`,
+    '',
+    'Assay scores:',
+    ...Object.entries(d.assay_scores).map(([k, v]) => `  ${k}: ${Math.round(v * 100)}%`)
+  ];
+  if (d.low_confidence_assays && d.low_confidence_assays.length) {
+    lines.push('', 'Low-confidence assays: ' + d.low_confidence_assays.join(', '));
+  }
+  const text = lines.join('\n');
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(() => alert('Report copied to clipboard.')).catch(() => {
+      window.prompt('Copy:', text);
+    });
+  } else {
+    window.prompt('Copy this report:', text);
+  }
+}
+
+async function setCompareBaselinePreset(smiles, displayName) {
+  API_URL = getResolvedApiUrl();
+  try {
+    const res = await fetch(`${API_URL}/predict`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ smiles })
+    });
+    const data = await res.json();
+    if (!res.ok || data.error) throw new Error(data.error || 'failed');
+    baselineResult = { name: displayName, data };
+  } catch (e) {
+    baselineResult = { name: displayName, data: generateMockData(smiles) };
+  }
+  renderComparison();
+}
+
+// Run on load
+window.onload = () => {
+  const fu = document.getElementById('footerUpdated');
+  if (fu) fu.textContent = 'Last updated: ' + new Date().toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+
+  applyHashSmiles();
+  renderFavoritesList();
+
+  const tag = document.getElementById('currentCompoundTag');
+  const initialSmiles = document.getElementById('smilesInput')?.value || '';
+  const meta = PRESETS[initialSmiles];
+  if (tag && meta) {
+    tag.innerHTML = `Currently viewing: <strong>${meta.name}</strong> (preset · ${meta.type})`;
+  }
+  checkBackend();
+  runPrediction();
+};
+</script>
+</body>
+</html>
