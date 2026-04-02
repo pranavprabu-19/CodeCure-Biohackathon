@@ -58,4 +58,3 @@ git commit -m "Added a new feature"
 git push
 ```
 
-Let me know if you run into any errors along the way, like authentication issues or merge conflicts!
